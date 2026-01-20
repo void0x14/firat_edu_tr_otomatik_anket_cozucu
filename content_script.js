@@ -351,6 +351,7 @@
             let targetRadio = null;
 
             // 1. ADIM: Label metni üzerinden kesin eşleşme ara
+            // Puan map: Metinleri ve negatif kelimeleri içerir
             const scoreMap = {
                 "5": { pos: ["kesinlikle katılıyorum", "çok iyi", "tamamen katılıyorum"], neg: ["katılmıyorum", "zayıf"] },
                 "4": { pos: ["katılıyorum", "iyi"], neg: ["katılmıyorum", "zayıf", "kesinlikle"] },
@@ -378,12 +379,12 @@
                 }
             }
 
-            // 2. ADIM: Value üzerinden tam eşleşme (örn: value="5")
+            // 2. ADIM: Value üzerinden tam eşleşme
             if (!targetRadio) {
                 targetRadio = group.find(r => String(r.value) === String(scoreValue));
             }
 
-            // 3. ADIM: Fallback - Sayısal yakınlık (ID veya Value içindeki rakam)
+            // 3. ADIM: Fallback - Sayısal yakınlık
             if (!targetRadio) {
                 const numericScore = parseInt(scoreValue);
                 const sorted = [...group].sort((a, b) => {
@@ -421,10 +422,6 @@
             const options = Array.from(s.options);
             const scoreNum = parseInt(scoreValue);
 
-            // Seçim algoritması:
-            // 1. Value tam eşleşme
-            // 2. Metin içinde tam puan (örn: "5")
-            // 3. Likert metni eşleşmesi (Radio ile aynı mantık)
             let targetOption = options.find(o => o.value === scoreValue);
 
             if (!targetOption) {
@@ -453,39 +450,38 @@
             }
         });
 
-        // TEXT INPUTS - Soldan sayı kopyala
+        // TEXT INPUTS
         const textInputs = document.querySelectorAll(`input[type="text"]:not([${CONFIG.unfilledAttr}]), input[type="number"]:not([${CONFIG.unfilledAttr}])`);
         textInputs.forEach(input => {
             if (input.value.trim()) return;
 
             const row = input.closest('tr');
-            if (!row) return;
-
-            const cells = Array.from(row.cells || []);
-            let leftValue = "";
-
-            for (let i = 0; i < cells.length; i++) {
-                const cell = cells[i];
-                if (cell.contains(input)) break;
-                const numbers = (cell.innerText || "").match(/(\d+)/g);
-                if (numbers) leftValue = numbers[numbers.length - 1];
+            if (row) {
+                const cells = Array.from(row.cells || []);
+                let leftValue = "";
+                for (let i = 0; i < cells.length; i++) {
+                    const cell = cells[i];
+                    if (cell.contains(input)) break;
+                    const numbers = (cell.innerText || "").match(/(\d+)/g);
+                    if (numbers) leftValue = numbers[numbers.length - 1];
+                }
+                if (leftValue) input.value = leftValue;
+                else input.value = scoreValue;
+            } else {
+                input.value = scoreValue;
             }
 
-            if (!leftValue) leftValue = scoreValue;
-
-            input.value = leftValue;
             input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
             input.setAttribute(CONFIG.unfilledAttr, 'true');
             filledCount++;
-            DebugLog.info(`Text input dolduruldu: ${leftValue}`);
         });
 
         // TEXTAREAS
         const textareas = document.querySelectorAll(`textarea:not([${CONFIG.unfilledAttr}])`);
         textareas.forEach(textarea => {
             if (textarea.value.trim()) return;
-            textarea.value = "Başarılı bir ders oldu.";
+            textarea.value = "Başarılı.";
             textarea.dispatchEvent(new Event('change', { bubbles: true }));
             textarea.setAttribute(CONFIG.unfilledAttr, 'true');
             filledCount++;
@@ -493,8 +489,7 @@
 
         if (filledCount > 0) {
             DebugLog.info(`${filledCount} alan dolduruldu`);
-            showOverlay(`${filledCount} alan dolduruldu. KAYDET otomatik basılacak...`);
-            // 2 saniye bekle ve KAYDET'e otomatik bas
+            showOverlay(`${filledCount} alan dolduruldu. KAYDET işlemi başlıyor...`);
             setTimeout(() => autoClickSaveButton(), 2000);
         } else {
             DebugLog.warn('Doldurulacak alan bulunamadı');
@@ -508,47 +503,48 @@
                 const txt = (btn.value || btn.innerText || '').toLowerCase();
                 return txt.includes("kaydet") || txt.includes("save") || txt.includes("gönder") || txt.includes("onayla");
             })
+            // Görünür butonları seç
             .filter(btn => btn.offsetParent !== null);
 
         const targetBtn = buttons[0];
 
         if (targetBtn) {
-            DebugLog.info(`KAYDET butonuna OTOMATİK basılıyor: ${targetBtn.value || targetBtn.innerText}`);
-            showOverlay('KAYDET butonuna otomatik basılıyor...');
+            DebugLog.info(`KAYDET butonu bulundu: ${targetBtn.value || targetBtn.innerText}`);
+            showOverlay('KAYDET butonuna basılıyor...');
 
             // Butonu vurgula
             targetBtn.style.border = "4px solid #28a745";
             targetBtn.style.boxShadow = "0 0 15px rgba(40, 167, 69, 0.7)";
-            targetBtn.style.backgroundColor = "#28a745";
-            targetBtn.style.color = "white";
 
-            // 1 saniye bekle ve tıkla
             await new Promise(r => setTimeout(r, 1000));
 
-            // Tıklama
+            // PostBack Kontrolü (Priority #1)
             const href = targetBtn.getAttribute('href');
-            const postBackParams = parsePostBackHref(href);
+            const onclick = targetBtn.getAttribute('onclick');
+
+            // Hem href hem onclick parse et
+            const postBackParams = parsePostBackHref(href) || parsePostBackHref(onclick);
 
             if (postBackParams) {
+                DebugLog.info('KAYDET için PostBack bulundu, Bridge ile tetikleniyor...');
                 try {
                     await triggerPostBack(postBackParams.eventTarget, postBackParams.eventArgument);
+                    // Başarılı olduysa beklemeye gerek yok, sayfa yenilenecek
+                    DebugLog.info('Save PostBack triggered successfully');
                 } catch (e) {
-                    targetBtn.click();
+                    DebugLog.error('Save PostBack hatası', e.message);
+                    targetBtn.click(); // Fallback
                 }
             } else {
+                DebugLog.warn('PostBack bulunamadı, düz tıklanıyor...');
                 targetBtn.click();
             }
 
-            DebugLog.info('KAYDET tıklandı, sayfa yenilenecek...');
-            showOverlay('Anket kaydedildi! Sonraki ankete geçiliyor...');
-
-            // 3 saniye bekle ve sayfayı yenile (sonraki ankete geçmek için)
-            setTimeout(() => {
-                window.location.reload();
-            }, 3000);
+            showOverlay('İşlem tamamlandı, sayfa yenileniyor...');
+            setTimeout(() => window.location.reload(), 3000);
         } else {
             DebugLog.error('KAYDET butonu bulunamadı!');
-            showOverlay('KAYDET butonu bulunamadı!', true);
+            showOverlay('HATA: Kaydet butonu bulunamadı!', true);
         }
     }
 

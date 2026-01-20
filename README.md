@@ -1,4 +1,4 @@
-# Fırat OBS Otomatik Anket Çözücü v3.0 🚀
+# Fırat OBS Otomatik Anket Çözücü v3.1.1 🚀
 
 Fırat Üniversitesi Öğrenci Bilgi Sistemi (OBS) üzerindeki zorunlu anketleri saniyeler içinde, tam otomatik bir akışla dolduran Manifest V3 tabanlı, modern bir tarayıcı eklentisidir.
 
