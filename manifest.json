@@ -1,0 +1,30 @@
+{
+    "manifest_version": 3,
+    "name": "Fırat OBS Anket Çözücü",
+    "version": "1.0",
+    "description": "Fırat Üniversitesi OBS anketlerini otomatik doldurur.",
+    "permissions": [
+        "storage"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "icons/icon128.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://obs.firat.edu.tr/oibs/std/*"
+            ],
+            "js": [
+                "content_script.js"
+            ],
+            "all_frames": true,
+            "run_at": "document_idle"
+        }
+    ],
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}
