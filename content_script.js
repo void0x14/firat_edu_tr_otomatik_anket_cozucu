@@ -9,6 +9,7 @@
 (function () {
     'use strict';
 
+    const INTERNALS = {}; // Export container for testing
     const CONFIG = {
         defaultHighScoreValue: "5",
         autoFillDelay: 1500,
@@ -16,6 +17,7 @@
         refreshInterval: 2000,
         modalCheckInterval: 500
     };
+    INTERNALS.CONFIG = CONFIG;
 
     /**
      * MODAL KILLER: Automatically closes blocking overlays
@@ -23,7 +25,8 @@
     function killModal() {
         // Option 1: SweetAlert Overlays (Common in OBS)
         const overlays = document.querySelectorAll('.swal2-container, .sweet-overlay, .modal-backdrop');
-        const confirmBtns = document.querySelectorAll('.swal2-confirm, .btn-primary, button:contains("Tamam"), button:contains("OK")');
+        const confirmBtns = Array.from(document.querySelectorAll('.swal2-confirm, .btn-primary, button'))
+            .filter(btn => btn.textContent && (btn.textContent.includes("Tamam") || btn.textContent.includes("OK")));
 
         // Also check parent context if we are in iframe
         let parentOverlays = [];
@@ -50,6 +53,7 @@
             });
         }
     }
+    INTERNALS.killModal = killModal;
 
     /**
      * Notification Overlay
@@ -226,11 +230,8 @@
             }
         });
 
-        if (filledCount > 0) {
-            showOverlay(`${filledCount} alan (${scoreValue} puanı ile) dolduruldu.`);
-            hookSaveButton();
-        }
     }
+    INTERNALS.fillSurveyFormWithScore = fillSurveyFormWithScore;
 
     function hookSaveButton() {
         const saveBtn = document.querySelector('input[type="submit"][value*="Kaydet"], button[id*="btnKaydet"]');
@@ -245,5 +246,10 @@
     // Safety Delay
     if (document.readyState === 'complete') init();
     else window.addEventListener('load', init);
+
+    // Export if in Node.js environment (for TestSprite/Jest)
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = INTERNALS;
+    }
 
 })();
