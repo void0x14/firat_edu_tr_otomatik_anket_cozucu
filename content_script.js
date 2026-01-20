@@ -1,5 +1,5 @@
 /**
- * OBS ANKET OTOMASYONU v3.2.0 - NUCLEAR FIX & NAVIGATION ENGINE
+ * OBS ANKET OTOMASYONU v3.2.1 - DYNAMIC NAVIGATION FIX
  * 
  * Mimari:
  * 1. Content Script (Isolated World) - Element tespiti ve UI
@@ -96,13 +96,6 @@
         setTimeout(() => element.removeAttribute(CONFIG.bridgeAttr), 3000);
     }
 
-    // ==================== LINK PARSER ====================
-    function parsePostBackHref(str) {
-        if (!str || typeof str !== 'string') return null;
-        const m = str.match(/__doPostBack\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\s*\)/);
-        return m ? { eventTarget: m[1], eventArgument: m[2] } : null;
-    }
-
     // ==================== UI OVERLAY ====================
     function showOverlay(message, isError = false) {
         const id = 'anket-solver-overlay';
@@ -166,13 +159,40 @@
     }
 
     async function navigateToGradeList() {
-        DebugLog.info('Navigating to Grade List...');
-        showOverlay('Not Listesine gidiliyor...');
+        DebugLog.info('Not Listesi sayfasına gidiliyor...');
+        showOverlay('Not Listesi sayfasına gidiliyor...');
 
-        // NUCLEAR OPTION: Direct URL
-        if (!window.location.href.includes('not_listesi')) {
-            window.location.href = '/oibs/std/not_listesi.aspx';
+        // DYNAMICALY FIND THE MENU ITEM
+        const allElements = Array.from(document.querySelectorAll('a, span, div, li, [onclick]'));
+
+        // 1. Doğrudan "Not Listesi" linkini ara
+        const target = allElements.find(el => {
+            const txt = (el.innerText || el.textContent || '').toLowerCase();
+            return txt.includes('not listesi') || txt.includes('not listem') || txt === 'not listesi';
+        });
+
+        if (target) {
+            DebugLog.info('Not Listesi hedefi bulundu, tıklanıyor.');
+            await clickElementSafely(target);
+            return true;
         }
+
+        // 2. Eğer bulunamadıysa "Ders ve Dönem İşlemleri" menüsünü bulmayı dene
+        const menuDers = allElements.find(el => {
+            const txt = (el.innerText || el.textContent || '').toLowerCase();
+            return txt.includes('ders') && txt.includes('dönem');
+        });
+
+        if (menuDers) {
+            DebugLog.info('Menü açılıyor (Ders ve Dönem)');
+            await clickElementSafely(menuDers);
+            setTimeout(navigateToGradeList, 1000);
+            return true;
+        }
+
+        DebugLog.warn('Navigasyon hedefi bulunamadı, ana sayfaya dönülüyor.');
+        window.location.href = 'index.aspx';
+        return false;
     }
 
     async function clickFirstZorunluAnket() {
@@ -276,7 +296,7 @@
         if (btn) {
             await clickElementSafely(btn);
             showOverlay('Kaydediliyor...');
-            // Loop break fallback
+            // Fallback
             setTimeout(() => navigateToGradeList(), 6000);
         } else {
             navigateToGradeList();
