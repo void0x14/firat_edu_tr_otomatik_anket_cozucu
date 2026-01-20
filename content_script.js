@@ -24,33 +24,64 @@
      */
     function killModal() {
         // Option 1: SweetAlert Overlays (Common in OBS)
-        const overlays = document.querySelectorAll('.swal2-container, .sweet-overlay, .modal-backdrop');
-        const confirmBtns = Array.from(document.querySelectorAll('.swal2-confirm, .btn-primary, button'))
-            .filter(btn => btn.textContent && (btn.textContent.includes("Tamam") || btn.textContent.includes("OK")));
+        const selectors = [
+            '.swal2-container', 
+            '.sweet-overlay', 
+            '.modal-backdrop', 
+            '.modal.show', 
+            '.ui-widget-overlay',
+            '[id*="pop-up"]',
+            '.alert'
+        ];
+        
+        const overlays = document.querySelectorAll(selectors.join(', '));
+        const confirmBtns = Array.from(document.querySelectorAll('.swal2-confirm, .btn-primary, button, input[type="button"]'))
+            .filter(btn => {
+                const txt = (btn.textContent || btn.value || "").toLowerCase();
+                return txt.includes("tamam") || txt.includes("ok") || txt.includes("kapat") || txt.includes("close");
+            });
 
         // Also check parent context if we are in iframe
         let parentOverlays = [];
         let parentBtns = [];
         try {
             if (window.top !== window) {
-                parentOverlays = window.top.document.querySelectorAll('.swal2-container');
-                parentBtns = window.top.document.querySelectorAll('.swal2-confirm');
+                parentOverlays = Array.from(window.top.document.querySelectorAll(selectors.join(', ')));
+                parentBtns = Array.from(window.top.document.querySelectorAll('.swal2-confirm, .btn-primary'))
+                    .filter(btn => {
+                        const txt = (btn.textContent || "").toLowerCase();
+                        return txt.includes("tamam") || txt.includes("ok");
+                    });
             }
         } catch (e) {
-            // Cross-origin protection might block this, but OBS usually same-origin
+            // Cross-origin protection might block this
         }
 
         const allOverlays = [...overlays, ...parentOverlays];
         const allBtns = [...confirmBtns, ...parentBtns];
 
         if (allOverlays.length > 0) {
-            console.log("[System] Blocking Modal Detected! Attempting to close...");
+            console.log("[System] Blocking UI element detected. Attempting removal...");
+            
+            // Remove overlays directly if buttons don't work
+            allOverlays.forEach(el => {
+                if (el && el.style) {
+                    el.style.display = 'none';
+                    el.style.opacity = '0';
+                    el.style.pointerEvents = 'none';
+                }
+            });
+
             allBtns.forEach(btn => {
                 if (btn && btn.offsetParent !== null) { // Check if visible
                     btn.click();
                     console.log("[System] Clicked confirmation button.");
                 }
             });
+            
+            // Fix body scroll if locked by modal
+            document.body.classList.remove('modal-open', 'swal2-shown');
+            document.body.style.overflow = 'auto';
         }
     }
     INTERNALS.killModal = killModal;
@@ -119,14 +150,21 @@
      * Detects the Survey List and auto-activates an unfilled survey
      */
     function handleSurveyList() {
+        console.log("[System] Scanning for unfilled surveys...");
         // Look for buttons like "Anket Doldur" or descriptive links
         const unfilledButtons = Array.from(document.querySelectorAll('a, button, input[type="button"]'))
-            .filter(el => (el.innerText || el.value || "").toLowerCase().includes("anket doldur") ||
-                (el.className && el.className.includes("btn-primary")));
+            .filter(el => {
+                const txt = (el.innerText || el.value || "").toLowerCase();
+                return txt.includes("anket doldur") || 
+                       (el.className && el.className.includes("btn-primary") && !el.hasAttribute('onclick'));
+            });
 
         if (unfilledButtons.length > 0) {
+            console.log(`[System] Found ${unfilledButtons.length} potential surveys. Clicking first...`);
             showOverlay("Sıradaki anket açılıyor...");
             unfilledButtons[0].click();
+        } else {
+            console.log("[System] No unfilled surveys detected on this page.");
         }
     }
 
@@ -136,9 +174,9 @@
     function init() {
         console.log("[System] Content Script Active. URL:", window.location.href);
 
-        // Get user preference for score (default to 5)
-        chrome.storage.local.get(['surveyScore'], (result) => {
-            const userScore = result.surveyScore || CONFIG.defaultHighScoreValue;
+        const isExtension = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
+
+        const startLogic = (userScore) => {
             console.log(`[System] Preferred Score: ${userScore}`);
 
             // Start the Modal Killer Loop
@@ -146,7 +184,7 @@
 
             // Determine page state - Check for radios, selects, or text inputs in tables
             const isForm = !!document.querySelector('input[type="radio"], select, table tr td input[type="text"]');
-            const isList = !!document.querySelector('a[onclick*="Anket"], button[id*="Anket"], .btn-primary');
+            const isList = !!document.querySelector('a[onclick*="Anket"], button[id*="Anket"], .btn-primary, [class*="Anket"]');
 
             console.log(`[System] Detection - isForm: ${isForm}, isList: ${isList}`);
 
@@ -162,34 +200,65 @@
             const observer = new MutationObserver((mutations) => {
                 killModal();
                 const currentIsForm = !!document.querySelector('input[type="radio"], select, table tr td input[type="text"]');
-                if (currentIsForm) fillSurveyFormWithScore(userScore);
-                else handleSurveyList();
+                const currentIsList = !!document.querySelector('a[onclick*="Anket"], button[id*="Anket"], .btn-primary');
+                
+                if (currentIsForm) {
+                    fillSurveyFormWithScore(userScore);
+                } else if (currentIsList) {
+                    handleSurveyList();
+                }
             });
 
             observer.observe(document.body, { childList: true, subtree: true });
-        });
+        };
+
+        if (isExtension) {
+            chrome.storage.local.get(['surveyScore'], (result) => {
+                const userScore = result.surveyScore || CONFIG.defaultHighScoreValue;
+                startLogic(userScore);
+            });
+        } else {
+            console.warn("[System] Not in extension context. Using default score.");
+            startLogic(CONFIG.defaultHighScoreValue);
+        }
     }
 
     /**
      * Updated fill logic with dynamic score
      */
     function fillSurveyFormWithScore(scoreValue) {
+        console.log(`[System] Executing fill logic with target score: ${scoreValue}`);
         let filledCount = 0;
 
         // Radios - Fırat OBS often uses tables where radio buttons are in specific columns
-        // We try to find the radio with the value matching scoreValue
+        // Standard Survey Pattern: 1-5 Scale. Usually 5th column or value="5"
         const radios = document.querySelectorAll(`input[type="radio"]:not([${CONFIG.unfilledAttr}])`);
+        
+        // Group radios by name to handle rows
+        const groupedRadios = {};
         radios.forEach(r => {
-            // OBS Radio logic: Usually 1-5. 
-            // Some surveys might have reversed logic or different labels, but value is generally the score.
-            if (r.value === scoreValue && !r.checked) {
-                r.checked = true;
-                r.dispatchEvent(new Event('change', { bubbles: true }));
-                r.dispatchEvent(new Event('click', { bubbles: true })); // Some scripts listen for click
+            if (!groupedRadios[r.name]) groupedRadios[r.name] = [];
+            groupedRadios[r.name].push(r);
+        });
+
+        Object.keys(groupedRadios).forEach(name => {
+            const group = groupedRadios[name];
+            let targetRadio = group.find(r => r.value === scoreValue);
+            
+            // Fallback: If no exact value match, take the one at index (score - 1) 
+            // Most surveys are 1 2 3 4 5. If we want 5, it's index 4.
+            if (!targetRadio && group.length >= 5) {
+                const idx = parseInt(scoreValue) - 1;
+                if (group[idx]) targetRadio = group[idx];
+            }
+
+            if (targetRadio && !targetRadio.checked) {
+                targetRadio.checked = true;
+                targetRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                targetRadio.dispatchEvent(new Event('click', { bubbles: true }));
                 filledCount++;
-                r.setAttribute(CONFIG.unfilledAttr, 'true');
-            } else if (r.checked) {
-                r.setAttribute(CONFIG.unfilledAttr, 'true');
+                group.forEach(r => r.setAttribute(CONFIG.unfilledAttr, 'true'));
+                console.log(`[System] Selected radio [${name}] with value/index: ${scoreValue}`);
             }
         });
 
@@ -197,12 +266,14 @@
         const selects = document.querySelectorAll(`select:not([${CONFIG.unfilledAttr}])`);
         selects.forEach(s => {
             let targetValue = null;
-            // Try to find exact value match
-            const targetOption = Array.from(s.options).find(o => o.value === scoreValue || o.text.startsWith(scoreValue));
+            const targetOption = Array.from(s.options).find(o => 
+                o.value === scoreValue || 
+                o.text.startsWith(scoreValue) || 
+                o.text.toLowerCase().includes("kesinlikle katılıyorum")
+            );
 
             if (targetOption) targetValue = targetOption.value;
             else if (s.options.length > 1) {
-                // If 5 is not found, take the last one (usually the highest/most positive)
                 targetValue = s.options[s.options.length - 1].value;
             }
 
@@ -211,37 +282,34 @@
                 s.dispatchEvent(new Event('change', { bubbles: true }));
                 filledCount++;
                 s.setAttribute(CONFIG.unfilledAttr, 'true');
-            } else if (s.value === targetValue) {
-                s.setAttribute(CONFIG.unfilledAttr, 'true');
+                console.log(`[System] Selected option for select [${s.id || s.name}]`);
             }
         });
 
         // AKTS / Workload Logic (Text inputs that need numbers)
-        // OBS sometimes asks for "Hours spent". We look for labels and fill the input.
         document.querySelectorAll('tr').forEach(row => {
             if (row.hasAttribute(CONFIG.unfilledAttr)) return;
             const cells = row.cells;
             if (cells && cells.length >= 2) {
                 const text = cells[0].innerText || "";
-                // Match "Mevcut İş Yükü (Saat)" or similar patterns
-                const hoursMatch = text.match(/İş Yükü/i) || text.match(/Saat/i);
-                const input = cells[cells.length - 1].querySelector('input[type="text"], input[type="number"]');
+                const isWorkload = /İş Yükü|Saat|Dakika|AKTS|Kredi/i.test(text);
+                const input = row.querySelector('input[type="text"], input[type="number"]');
                 
-                if (hoursMatch && input && !input.value) {
-                    // Try to extract a suggested number from text or default to 5
+                if (isWorkload && input && !input.value) {
                     const suggested = text.match(/(\d+)/);
                     input.value = suggested ? suggested[1] : "5";
                     input.dispatchEvent(new Event('input', { bubbles: true }));
                     input.dispatchEvent(new Event('change', { bubbles: true }));
                     row.setAttribute(CONFIG.unfilledAttr, 'true');
                     filledCount++;
+                    console.log(`[System] Filled workload input: ${input.value}`);
                 }
             }
         });
 
         if (filledCount > 0) {
-            console.log(`[System] Filled ${filledCount} elements.`);
-            showOverlay(`${filledCount} alan dolduruldu.`);
+            console.log(`[System] Batch complete. Filled ${filledCount} elements.`);
+            showOverlay(`${filledCount} alan otomatik dolduruldu.`);
             hookSaveButton();
         }
     }
@@ -257,9 +325,22 @@
         }
     }
 
-    // Safety Delay
-    if (document.readyState === 'complete') init();
-    else window.addEventListener('load', init);
+    // Safety Delay and Entry Point
+    function bootstrap() {
+        if (document.body) {
+            init();
+        } else {
+            const observer = new MutationObserver((mutations, obs) => {
+                if (document.body) {
+                    obs.disconnect();
+                    init();
+                }
+            });
+            observer.observe(document.documentElement, { childList: true });
+        }
+    }
+
+    bootstrap();
 
     // Export if in Node.js environment (for TestSprite/Jest)
     if (typeof module !== 'undefined' && module.exports) {
