@@ -43,11 +43,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     openObsBtn.addEventListener('click', () => {
-        const url = 'https://obs.firat.edu.tr/oibs/std/';
+        // Önce giriş yapılıp yapılmadığını kontrol et
+        const checkUrl = 'https://obs.firat.edu.tr/oibs/std/';
+        
         if (isExtension) {
-            chrome.tabs.create({ url });
+            // Yeni sekme aç ve kontrol et
+            chrome.tabs.create({ url: checkUrl }, (tab) => {
+                // Sekme yüklendikten sonra kontrol et
+                setTimeout(() => {
+                    chrome.tabs.get(tab.id, (updatedTab) => {
+                        if (updatedTab.url.includes('login') || updatedTab.url.includes('giris')) {
+                            // Giriş sayfasına yönlendirildi, öğrenci girişine git
+                            chrome.tabs.update(tab.id, { 
+                                url: 'https://obs.firat.edu.tr/oibs/ogrenci/login.aspx' 
+                            });
+                        }
+                        // Eğer zaten giriş yapılmışsa, mevcut URL'de kalır
+                    });
+                }, 2000);
+            });
         } else {
-            window.open(url, '_blank');
+            // Eklenti değilse direkt aç
+            window.open(checkUrl, '_blank');
         }
     });
 });
