@@ -10,6 +10,7 @@
 ✅ **Form Filling**: Radio, select, text input, textarea handling
 ✅ **AUTO SAVE**: KAYDET butonuna otomatik basma
 ✅ **Loop Automation**: Tüm anketleri sırayla doldurma
+✅ **Radio Visibility Fix**: Gizli radio butonlar `MouseEvent` ile fiziksel olarak işaretleniyor.
 
 ## v3.0 Major Improvements
 ✅ **CSP Bypass**: `javascript:__doPostBack` linkleri artık çalışıyor

@@ -1,10 +1,18 @@
+# System artifacts
 view-source_https___obs.firat.edu.tr_oibs_std_index.aspx_curOp=0#.html
 *.pyc
 __pycache__/
 .DS_Store
-testsprite_tests/
 
-# Debug logs (developer only - not for git)
+# IDE & Special Tools
+.kiro/
+.orchids/
+.vscode/
+testsprite_tests/
+release/
+dist/
+
+# Debug logs
 *.log
 debug.log
 obs_debug_*.log

@@ -27,24 +27,19 @@
         add(level, message, data = null) {
             const entry = {
                 timestamp: new Date().toISOString(),
-                level,
-                message,
-                data,
-                url: window.location.href
+                level: level.toUpperCase(),
+                message: message,
+                context: data,
+                url: window.location.href.split('?')[0] // URL parametrelerini temizle (Gizlilik)
             };
             this.logs.push(entry);
 
-            // Console'a da yaz
-            const prefix = '[OBS-Anket]';
-            if (level === 'error') {
-                console.error(prefix, message, data || '');
-            } else if (level === 'warn') {
-                console.warn(prefix, message, data || '');
-            } else {
-                console.log(prefix, message, data || '');
-            }
+            const prefix = `[OBS-${level.toUpperCase()}]`;
+            const style = level === 'error' ? 'color: #ff4d4d; font-weight: bold;' :
+                level === 'warn' ? 'color: #ffa500;' : 'color: #00ff00;';
 
-            // Chrome storage'a kaydet
+            console.log(`%c${prefix} ${message}`, style, data || '');
+
             this.saveToStorage();
         },
 
@@ -351,53 +346,78 @@
         Object.keys(groupedRadios).forEach(name => {
             const group = groupedRadios[name];
 
-            // Debug verisi: Mevcut değerleri logla
-            const values = group.map(r => r.value);
-            DebugLog.info(`Radio grup [${name}] analiz: ${values.join(', ')} | Hedef Puan: ${scoreValue}`);
+            DebugLog.info(`Radio grup [${name}] analiz ediliyor. Hedef: ${scoreValue}`);
 
-            // Seçim algoritması: Tam eşleşme veya parça eşleşmesi
-            let targetRadio = group.find(r => String(r.value) === String(scoreValue)) ||
-                group.find(r => r.value.includes(String(scoreValue)));
+            let targetRadio = null;
 
-            // Eğer hala bulunamadıysa sayısal olarak en yakınını bul (Likert scale fallback)
+            // 1. ADIM: Label metni üzerinden kesin eşleşme ara
+            const scoreMap = {
+                "5": ["kesinlikle katılıyorum", "çok iyi", "tamamen katılıyorum", "5"],
+                "4": ["katılıyorum", "iyi", "4"],
+                "3": ["kararsızım", "orta", "ne katılıyorum ne katılmıyorum", "3"],
+                "2": ["katılmıyorum", "zayıf", "2"],
+                "1": ["kesinlikle katılmıyorum", "çok zayıf", "hiç katılmıyorum", "1"]
+            };
+
+            const keywords = scoreMap[scoreValue] || [scoreValue];
+
+            for (const radio of group) {
+                const label = document.querySelector(`label[for="${radio.id}"]`);
+                if (label) {
+                    const labelText = (label.innerText || label.textContent || "").trim().toLowerCase();
+
+                    // "katılmıyorum" metni "katılıyorum" içerdiği için özel kontrol
+                    if (scoreValue === "4" || scoreValue === "5") {
+                        if (labelText.includes("katılmıyorum")) continue;
+                    }
+                    if (scoreValue === "2" || scoreValue === "1") {
+                        if (scoreValue === "2" && labelText.includes("kesinlikle")) continue;
+                    }
+
+                    if (keywords.some(k => labelText === k || (labelText.includes(k) && k.length > 2))) {
+                        targetRadio = radio;
+                        DebugLog.info(`  Label üzerinden eşleşti: "${labelText}" -> Puan ${scoreValue}`);
+                        break;
+                    }
+                }
+            }
+
+            // 2. ADIM: Label ile bulunamadıysa Value üzerinden tam eşleşme ara
+            if (!targetRadio) {
+                targetRadio = group.find(r => String(r.value) === String(scoreValue)) ||
+                    group.find(r => r.id.endsWith(`_${scoreValue}`));
+            }
+
+            // 3. ADIM: Fallback - Sayısal yakınlık
             if (!targetRadio) {
                 const numericScore = parseInt(scoreValue);
                 const sorted = [...group].sort((a, b) => {
-                    const aVal = parseInt(a.value) || 0;
-                    const bVal = parseInt(b.value) || 0;
+                    const aVal = parseInt(a.value.match(/\d+/)?.[0]) || 0;
+                    const bVal = parseInt(b.value.match(/\d+/)?.[0]) || 0;
                     return Math.abs(aVal - numericScore) - Math.abs(bVal - numericScore);
                 });
                 targetRadio = sorted[0];
-                DebugLog.info(`  En yakın değer seçildi: ${targetRadio?.value}`);
+                DebugLog.info(`  Fallback (yakınlık): ${targetRadio?.value}`);
             }
 
             if (targetRadio) {
-                DebugLog.info(`✓ Seçim yapılıyor: ${targetRadio.value} (ID: ${targetRadio.id})`);
-
-                // ASP.NET radio'ları gizleyip label kullanıyor olabilir, label'ı bulup tıkla
                 const label = document.querySelector(`label[for="${targetRadio.id}"]`);
-
-                // Gerçek MouseEvent simülasyonu
-                const clickEvent = new MouseEvent('click', {
-                    view: window, bubbles: true, cancelable: true
-                });
+                const clickEvent = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
 
                 if (label) {
                     label.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     label.dispatchEvent(clickEvent);
-                    DebugLog.info('  Label tıklandı (UI güncellemesi için)');
+                    DebugLog.info('  Label tıklandı');
                 }
 
                 targetRadio.checked = true;
                 targetRadio.dispatchEvent(clickEvent);
-
-                // Form tetikleyici event'ler
                 targetRadio.dispatchEvent(new Event('input', { bubbles: true }));
                 targetRadio.dispatchEvent(new Event('change', { bubbles: true }));
 
                 filledCount++;
                 group.forEach(r => r.setAttribute(CONFIG.unfilledAttr, 'true'));
-                DebugLog.info(`  Radio başarıyla işaretlendi [${name}]`);
+                DebugLog.info(`✓ Radio işaretlendi [${name}]`);
             }
         });
 
