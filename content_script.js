@@ -13,8 +13,43 @@
         defaultHighScoreValue: "5",
         autoFillDelay: 1500,
         unfilledAttr: 'data-anket-processed',
-        refreshInterval: 2000
+        refreshInterval: 2000,
+        modalCheckInterval: 500
     };
+
+    /**
+     * MODAL KILLER: Automatically closes blocking overlays
+     */
+    function killModal() {
+        // Option 1: SweetAlert Overlays (Common in OBS)
+        const overlays = document.querySelectorAll('.swal2-container, .sweet-overlay, .modal-backdrop');
+        const confirmBtns = document.querySelectorAll('.swal2-confirm, .btn-primary, button:contains("Tamam"), button:contains("OK")');
+
+        // Also check parent context if we are in iframe
+        let parentOverlays = [];
+        let parentBtns = [];
+        try {
+            if (window.top !== window) {
+                parentOverlays = window.top.document.querySelectorAll('.swal2-container');
+                parentBtns = window.top.document.querySelectorAll('.swal2-confirm');
+            }
+        } catch (e) {
+            // Cross-origin protection might block this, but OBS usually same-origin
+        }
+
+        const allOverlays = [...overlays, ...parentOverlays];
+        const allBtns = [...confirmBtns, ...parentBtns];
+
+        if (allOverlays.length > 0) {
+            console.log("[System] Blocking Modal Detected! Attempting to close...");
+            allBtns.forEach(btn => {
+                if (btn && btn.offsetParent !== null) { // Check if visible
+                    btn.click();
+                    console.log("[System] Clicked confirmation button.");
+                }
+            });
+        }
+    }
 
     /**
      * Notification Overlay
@@ -105,18 +140,28 @@
             const userScore = result.surveyScore || CONFIG.defaultHighScoreValue;
             console.log(`[System] Preferred Score: ${userScore}`);
 
+            // Start the Modal Killer Loop
+            setInterval(killModal, CONFIG.modalCheckInterval);
+
+            // Determine page state
             const isForm = !!document.querySelector('input[type="radio"], select, table tr td input');
 
             if (isForm) {
+                // Wait slightly for DOM to settle
                 setTimeout(() => fillSurveyFormWithScore(userScore), CONFIG.autoFillDelay);
             } else {
                 setTimeout(handleSurveyList, CONFIG.autoFillDelay);
             }
 
-            const observer = new MutationObserver(() => {
+            // Watch for dynamic content changes (ASP.NET UpdatePanels)
+            const observer = new MutationObserver((mutations) => {
+                // Kill modal on mutations too
+                killModal();
+
                 if (isForm) fillSurveyFormWithScore(userScore);
                 else handleSurveyList();
             });
+
             observer.observe(document.body, { childList: true, subtree: true });
         });
     }
@@ -128,26 +173,39 @@
         let filledCount = 0;
 
         // Radios
+        // Radios
         document.querySelectorAll(`input[type="radio"]:not([${CONFIG.unfilledAttr}])`).forEach(r => {
-            if (r.value === scoreValue) {
+            // LOOP BREAKER: Check if already checked to avoid infinite event loop
+            if (r.value === scoreValue && !r.checked) {
                 r.checked = true;
                 r.dispatchEvent(new Event('change', { bubbles: true }));
                 filledCount++;
+                // Mark as processed to prevent re-processing
+                r.setAttribute(CONFIG.unfilledAttr, 'true');
+            } else if (r.value === scoreValue && r.checked) {
+                // Already correct, just mark it
+                r.setAttribute(CONFIG.unfilledAttr, 'true');
             }
-            r.setAttribute(CONFIG.unfilledAttr, 'true');
         });
 
         // Selects
+        // Selects
         document.querySelectorAll(`select:not([${CONFIG.unfilledAttr}])`).forEach(s => {
+            // LOOP BREAKER: Check current value
+            let targetValue = null;
             const targetOption = Array.from(s.options).find(o => o.value === scoreValue);
-            if (targetOption) {
-                s.value = targetOption.value;
-            } else if (s.options.length > 1) {
-                s.selectedIndex = s.options.length - 1;
+
+            if (targetOption) targetValue = targetOption.value;
+            else if (s.options.length > 1) targetValue = s.options[s.options.length - 1].value;
+
+            if (targetValue && s.value !== targetValue) {
+                s.value = targetValue;
+                s.dispatchEvent(new Event('change', { bubbles: true }));
+                filledCount++;
+                s.setAttribute(CONFIG.unfilledAttr, 'true');
+            } else if (s.value === targetValue) {
+                s.setAttribute(CONFIG.unfilledAttr, 'true');
             }
-            s.dispatchEvent(new Event('change', { bubbles: true }));
-            s.setAttribute(CONFIG.unfilledAttr, 'true');
-            filledCount++;
         });
 
         // AKTS Logic stays same
