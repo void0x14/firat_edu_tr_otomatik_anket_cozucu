@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Fırat OBS Anket Çözücü",
-    "version": "1.0",
+    "version": "1.1",
     "description": "Fırat Üniversitesi OBS anketlerini otomatik doldurur.",
     "permissions": [
         "storage"
