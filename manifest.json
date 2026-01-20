@@ -1,10 +1,15 @@
 {
     "manifest_version": 3,
     "name": "Fırat OBS Anket Çözücü",
-    "version": "1.1",
-    "description": "Fırat Üniversitesi OBS anketlerini otomatik doldurur.",
+    "version": "3.0.1",
+    "description": "Fırat Üniversitesi OBS anketlerini otomatik doldurur. CSP Bypass ve Main World Bridge destekli.",
     "permissions": [
-        "storage"
+        "storage",
+        "scripting",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "*://obs.firat.edu.tr/*"
     ],
     "action": {
         "default_popup": "popup.html",
@@ -19,7 +24,17 @@
                 "content_script.js"
             ],
             "all_frames": true,
-            "run_at": "document_start"
+            "run_at": "document_end"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "injected.js"
+            ],
+            "matches": [
+                "*://obs.firat.edu.tr/*"
+            ]
         }
     ],
     "icons": {

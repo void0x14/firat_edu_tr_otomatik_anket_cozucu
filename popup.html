@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <style>
         body {
-            width: 250px;
+            width: 280px;
             padding: 15px;
             font-family: 'Segoe UI', sans-serif;
             background: #f8f9fa;
@@ -25,12 +25,18 @@
             color: #007bff;
         }
 
+        .version {
+            font-size: 10px;
+            color: #999;
+        }
+
         .status-box {
             background: white;
             padding: 10px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             font-size: 13px;
+            margin-bottom: 10px;
         }
 
         .footer {
@@ -56,13 +62,49 @@
         .btn:hover {
             background: #0056b3;
         }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .debug-section {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed #ccc;
+        }
+
+        .debug-title {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .log-count {
+            font-size: 10px;
+            color: #28a745;
+            margin-top: 5px;
+        }
     </style>
 </head>
 
 <body>
     <div class="header">
         <div class="title">Fırat OBS Yardımcısı</div>
+        <div class="version">v3.0 - CSP Bypass</div>
     </div>
+
     <div class="status-box">
         <div style="font-weight: bold; margin-bottom: 8px;">Doldurma Ayarları</div>
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
@@ -77,10 +119,20 @@
         </div>
         <div id="saveMsg" style="color: #28a745; font-size: 11px; display: none;">✓ Ayarlar kaydedildi.</div>
     </div>
+
     <button class="btn" id="openObs">OBS Sayfasını Aç</button>
-    <div class="footer">
-        System Hardening Protocol v1.1
+
+    <div class="debug-section">
+        <div class="debug-title">🔧 Geliştirici Araçları</div>
+        <button class="btn btn-secondary" id="downloadLogs">📥 Debug Loglarını İndir</button>
+        <button class="btn btn-danger" id="clearLogs">🗑️ Logları Temizle</button>
+        <div class="log-count" id="logCount">Yükleniyor...</div>
     </div>
+
+    <div class="footer">
+        System Hardening Protocol v3.0
+    </div>
+
     <script src="popup.js"></script>
 </body>
 

@@ -1,46 +1,32 @@
-# Katkıda Bulunma Rehberi (Contributing Guide)
+# Katkıda Bulunma Rehberi
 
-Bu projeye katkıda bulunmak istediğiniz için teşekkürler! Projenin sürdürülebilirliği ve kod kalitesi için aşağıdaki kurallara uymanızı rica ederiz.
+Fırat OBS Otomatik Anket Çözücü projesine katkıda bulunmak istediğiniz için teşekkür ederiz! Bu proje toplum yararına ve açık kaynak vizyonuyla geliştirilmektedir.
 
-## 🛠️ Geliştirme Süreci
+## 🤝 Nasıl Katkı Sağlarsınız?
 
-1. **Forklayın**: Bu repoyu kendi hesabınıza fork'layın.
-2. **Branch Açın**: Yapacağınız değişiklik için özel bir branch oluşturun.
-   ```bash
-   git checkout -b feature/yeni-ozellik
-   # veya
-   git checkout -b fix/hata-duzeltmesi
-   ```
-3. **Atomik Commitler**: Yaptığınız değişiklikleri küçük, anlamlı ve atomik parçalar halinde commitleyin.
+### 1. Hata Bildirimi (Issue)
+Karşılaştığınız sorunları eklenti içinden aldığınız **Debug Logları** ile birlikte "Issues" sekmesinden bildirebilirsiniz. Lütfen OBS versiyonunu veya sayfa yapısındaki değişiklikleri belirtmeyi unutmayın.
 
-### Commit Mesajı Formatı
-Commit mesajlarınızda [Conventional Commits](https://www.conventionalcommits.org/) yapısını kullanın:
+### 2. Kod Geliştirme (Pull Request)
+Projeyi geliştirmek için:
+1. Repoyu fork edin.
+2. Anlamlı bir isimle yeni bir branch oluşturun (`git checkout -b fix/radio-logic`).
+3. Değişikliklerinizi yapın ve **Conventional Commits** standartlarına uygun commit mesajları atın.
+   - `feat:` Yeni özellik
+   - `fix:` Hata düzeltme
+   - `docs:` Dökümantasyon
+4. PR gönderirken yaptığınız değişikliğin teknik detaylarını ve test sonuçlarını açıklayın.
 
-- `feat:` Yeni bir özellik eklendiğinde.
-- `fix:` Bir düzeltme yapıldığında.
-- `docs:` Sadece dökümantasyon değişikliği.
-- `style:` Kod formatı, noktalı virgül eksikliği vb. (kod çalışmasını etkilemeyen).
-- `refactor:` Ne hata düzelten ne de özellik ekleyen kod değişikliği.
+## 🏗️ Mimari Standartlar
 
-Örnek:
-```
-feat: add dynamic scoring preference to popup
-fix: resolve navigation loop issue in content script
-```
+- **Vanilla JS**: Harici kütüphane kullanımından kaçınmaya çalışıyoruz (Hız ve güvenlik için).
+- **Asenkron Yapı**: Tüm işlemler `async/await` mimarisiyle yönetilmelidir.
+- **CSP Uyumluluğu**: Web sayfası dünyasına doğrudan müdahale gerektiren işler `injected.js` üzerinden köprü kurularak yapılmalıdır.
 
-## 🧪 Test Süreci
+## 🧹 Temizlik ve Düzen
 
-**Navigation Engine** üzerinde değişiklik yapıyorsanız lütfen aşağıdaki senaryoları test edin:
-1. Anket listesinde boş anket varken otomatik giriyor mu?
-2. Anket doldurulduktan sonra "Kaydet"e basınca liste yenileniyor mu?
-3. Tüm anketler bittiğinde sonsuz döngüye giriyor mu?
-
-## 📝 Pull Request (PR) Gönderimi
-
-- PR başlığınız net ve açıklayıcı olsun.
-- Yaptığınız değişikliğin *neden* gerekli olduğunu açıklayın.
-- Varsa ilgili Issue numarasını belirtin.
+- Yerel geliştirme dosyalarınızı (`.vscode`, `.env` vb.) repoya pushlamayın.
+- `.gitignore` dosyasındaki kurallara sadık kalın.
+- Yeni eklenen fonksiyonlar için mutlaka JSDoc açıklaması veya detaylı yorum satırı ekleyin.
 
 ---
-
-**System Hardening Protocol**
