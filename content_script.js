@@ -134,10 +134,7 @@
      * Main Init
      */
     function init() {
-        // Only run in frames (survey is always in an iframe in OBS)
-        if (window === window.top) return;
-
-        console.log("[System] Content Script Active. Fetching preferences...");
+        console.log("[System] Content Script Active. URL:", window.location.href);
 
         // Get user preference for score (default to 5)
         chrome.storage.local.get(['surveyScore'], (result) => {
@@ -147,22 +144,25 @@
             // Start the Modal Killer Loop
             setInterval(killModal, CONFIG.modalCheckInterval);
 
-            // Determine page state
-            const isForm = !!document.querySelector('input[type="radio"], select, table tr td input');
+            // Determine page state - Check for radios, selects, or text inputs in tables
+            const isForm = !!document.querySelector('input[type="radio"], select, table tr td input[type="text"]');
+            const isList = !!document.querySelector('a[onclick*="Anket"], button[id*="Anket"], .btn-primary');
+
+            console.log(`[System] Detection - isForm: ${isForm}, isList: ${isList}`);
 
             if (isForm) {
-                // Wait slightly for DOM to settle
+                console.log("[System] Form detected. Filling...");
                 setTimeout(() => fillSurveyFormWithScore(userScore), CONFIG.autoFillDelay);
-            } else {
+            } else if (isList) {
+                console.log("[System] List detected. Scanning for surveys...");
                 setTimeout(handleSurveyList, CONFIG.autoFillDelay);
             }
 
             // Watch for dynamic content changes (ASP.NET UpdatePanels)
             const observer = new MutationObserver((mutations) => {
-                // Kill modal on mutations too
                 killModal();
-
-                if (isForm) fillSurveyFormWithScore(userScore);
+                const currentIsForm = !!document.querySelector('input[type="radio"], select, table tr td input[type="text"]');
+                if (currentIsForm) fillSurveyFormWithScore(userScore);
                 else handleSurveyList();
             });
 
@@ -176,31 +176,35 @@
     function fillSurveyFormWithScore(scoreValue) {
         let filledCount = 0;
 
-        // Radios
-        // Radios
-        document.querySelectorAll(`input[type="radio"]:not([${CONFIG.unfilledAttr}])`).forEach(r => {
-            // LOOP BREAKER: Check if already checked to avoid infinite event loop
+        // Radios - Fırat OBS often uses tables where radio buttons are in specific columns
+        // We try to find the radio with the value matching scoreValue
+        const radios = document.querySelectorAll(`input[type="radio"]:not([${CONFIG.unfilledAttr}])`);
+        radios.forEach(r => {
+            // OBS Radio logic: Usually 1-5. 
+            // Some surveys might have reversed logic or different labels, but value is generally the score.
             if (r.value === scoreValue && !r.checked) {
                 r.checked = true;
                 r.dispatchEvent(new Event('change', { bubbles: true }));
+                r.dispatchEvent(new Event('click', { bubbles: true })); // Some scripts listen for click
                 filledCount++;
-                // Mark as processed to prevent re-processing
                 r.setAttribute(CONFIG.unfilledAttr, 'true');
-            } else if (r.value === scoreValue && r.checked) {
-                // Already correct, just mark it
+            } else if (r.checked) {
                 r.setAttribute(CONFIG.unfilledAttr, 'true');
             }
         });
 
-        // Selects
-        // Selects
-        document.querySelectorAll(`select:not([${CONFIG.unfilledAttr}])`).forEach(s => {
-            // LOOP BREAKER: Check current value
+        // Selects - Some questions are dropdowns
+        const selects = document.querySelectorAll(`select:not([${CONFIG.unfilledAttr}])`);
+        selects.forEach(s => {
             let targetValue = null;
-            const targetOption = Array.from(s.options).find(o => o.value === scoreValue);
+            // Try to find exact value match
+            const targetOption = Array.from(s.options).find(o => o.value === scoreValue || o.text.startsWith(scoreValue));
 
             if (targetOption) targetValue = targetOption.value;
-            else if (s.options.length > 1) targetValue = s.options[s.options.length - 1].value;
+            else if (s.options.length > 1) {
+                // If 5 is not found, take the last one (usually the highest/most positive)
+                targetValue = s.options[s.options.length - 1].value;
+            }
 
             if (targetValue && s.value !== targetValue) {
                 s.value = targetValue;
@@ -212,16 +216,21 @@
             }
         });
 
-        // AKTS Logic stays same
+        // AKTS / Workload Logic (Text inputs that need numbers)
+        // OBS sometimes asks for "Hours spent". We look for labels and fill the input.
         document.querySelectorAll('tr').forEach(row => {
             if (row.hasAttribute(CONFIG.unfilledAttr)) return;
             const cells = row.cells;
             if (cells && cells.length >= 2) {
                 const text = cells[0].innerText || "";
-                const hoursMatch = text.match(/Mevcut İş Yükü\s+\(Saat\).+?(\d+)/i) || text.match(/(\d+)\s+Saat/i);
+                // Match "Mevcut İş Yükü (Saat)" or similar patterns
+                const hoursMatch = text.match(/İş Yükü/i) || text.match(/Saat/i);
                 const input = cells[cells.length - 1].querySelector('input[type="text"], input[type="number"]');
-                if (hoursMatch && input) {
-                    input.value = hoursMatch[1];
+                
+                if (hoursMatch && input && !input.value) {
+                    // Try to extract a suggested number from text or default to 5
+                    const suggested = text.match(/(\d+)/);
+                    input.value = suggested ? suggested[1] : "5";
                     input.dispatchEvent(new Event('input', { bubbles: true }));
                     input.dispatchEvent(new Event('change', { bubbles: true }));
                     row.setAttribute(CONFIG.unfilledAttr, 'true');
@@ -230,6 +239,11 @@
             }
         });
 
+        if (filledCount > 0) {
+            console.log(`[System] Filled ${filledCount} elements.`);
+            showOverlay(`${filledCount} alan dolduruldu.`);
+            hookSaveButton();
+        }
     }
     INTERNALS.fillSurveyFormWithScore = fillSurveyFormWithScore;
 
