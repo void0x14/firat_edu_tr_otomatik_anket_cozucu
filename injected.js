@@ -45,9 +45,37 @@
         }
     });
 
+    // ==================== AUTO MODAL CLOSER (MutationObserver) ====================
+    // Sayfada beliren "Başarıyla kaydedildi" pencerelerini bridge beklemeden anında yakalar ve kapatır.
+    const modalObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                const bodyText = document.body.innerText || '';
+                if (bodyText.includes('başarıyla kaydedildi') || bodyText.includes('işlem başarılı')) {
+                    const buttons = Array.from(document.querySelectorAll('button, input[type="button"], a'))
+                        .filter(b => {
+                            const txt = (b.innerText || b.value || '').toLowerCase();
+                            return txt.includes('tamam') || txt.includes('kapat') || txt === 'ok';
+                        })
+                        .filter(b => b.offsetParent !== null);
+
+                    if (buttons.length > 0) {
+                        console.log('[OBS-Bridge] Success modal detected, clicking "Tamam" button.');
+                        buttons[0].click();
+
+                        // Başarıyı content script'e bildir
+                        window.postMessage({ type: 'OBS_SUCCESS_EVENT' }, '*');
+                    }
+                }
+            }
+        }
+    });
+
+    modalObserver.observe(document.body, { childList: true, subtree: true });
+
     // Hazırız mesajı
     setTimeout(() => {
         window.postMessage({ type: 'OBS_BRIDGE_READY' }, '*');
-        console.log('[OBS-Bridge] Bridge aktif ve dinliyor.');
+        console.log('[OBS-Bridge] Bridge aktif ve dinliyor (MutationObserver aktif).');
     }, 500);
 })();
